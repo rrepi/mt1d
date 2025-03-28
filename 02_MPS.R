@@ -1,8 +1,9 @@
 ### Methylation score
 #INPUT:
-# Methylation M-values of differentially methylated CpGs (.txt)
-# Metadata file including the sampleID and covariables
+# Methylation M-values of differentially methylated CpGs (e.g., test_mvalues.txt)
+# Metadata file including the subject_ID and covariables (e.g., test_metadata.txt)
 # List of CpGs of interest (e.g. CpGs related to type 1 diabetes risk genes)
+# (e.g., test_CpGs.txt)
 
 #load packages
 library(tidymodels)
@@ -15,16 +16,16 @@ library(caret)
 library(randomForest)
 
 # set path of your data
-setwd()
+setwd("")
 set.seed(42)
 
 #######################
 # Prepare the data ----
 #######################
 
-# read the M-values of differentially methylated CpGs (columns=sample_ID, rownames=ProbeID)
+# read the M-values of differentially methylated CpGs (columns=subject_ID, rownames=ProbeID)
 m_values<- 
-  read.csv("mvals.txt",
+  read.csv("test_mvalues.txt",
            sep=""
            )
 
@@ -39,8 +40,9 @@ names(m_values)<-sapply(str_remove_all(colnames(m_values),"X"),"[") #in case sam
 
 # read the cpgs to be included (e.g. CpGs associated with T1D susceptibility genes)
 cpgs <- 
-  read_excel("cpgs.xlsx") %>%
-  filter(CpGT1Dgene == TRUE) %>%
+  read.table("test_CpGs.txt", 
+             header = TRUE) %>%
+  filter(CpGT1Dgene == "Yes") %>%
   pull(CpG)
 
 # filter methylation values of selected CpGs
@@ -51,12 +53,13 @@ m_values <-
 # and transpose the matrix
 m_values <-
   m_values %>%
-  pivot_longer(!cpg, names_to = "sample_ID") %>%
+  pivot_longer(!cpg, names_to = "subject_ID") %>%
   pivot_wider(names_from = cpg)
 
 # read the metadata
 metadata <- 
-  read_excel("metadata.xlsx")
+  read.table("test_metadata.txt", 
+             header = TRUE)
 
 # keep only CpGs that are uncorrelated (< 0.8)
 cor_mat <- 
@@ -75,7 +78,7 @@ m_values <-
 # merge the metadata and the data
 data_full <-
   m_values %>%
-  left_join(metadata, by = "sample_ID") %>%
+  left_join(metadata, by = "subject_ID") %>%
   dplyr::select(all_of(names(metadata)), everything())
 
 
@@ -86,12 +89,9 @@ data_full <-
 # keep only complete observations of the included variables
 data_reg <-
   data_full %>%
-  dplyr::select(sample_ID, motherT1D, starts_with("cg")) %>%
+  dplyr::select(subject_ID, maternal_t1d, starts_with("cg")) %>%
   drop_na() %>%
-  mutate(
-    motherT1D = ifelse(motherT1D, "Yes", "No"),
-    motherT1D = factor(motherT1D, levels = c("No", "Yes"))
-  )
+  mutate(across(maternal_t1d, as.factor))
 
 # Define the control using a random forest selection function
 control <- 
@@ -109,10 +109,9 @@ x <-
 
 # Target variable
 y <- 
-  data_reg$motherT1D
+  data_reg$maternal_t1d
 
 # Training: 80%; Test: 20%
-set.seed(2021)
 inTrain <- 
   createDataPartition(y, p = .80, list = FALSE)[,1]
 
@@ -160,51 +159,51 @@ ggplot(data = varimp_data,
        aes(x = reorder(feature, -importance),
            y = importance, 
            fill = feature)) +
-  geom_bar(stat="identity") + 
+  geom_bar(stat = "identity") + 
   scale_fill_brewer(palette = "Paired") +
   geom_text(aes(label = round(importance, 1)),
-            vjust=1.6, 
-            color="white", 
-            size=4) +
-  labs(x="", y="") +
+            vjust = 1.6, 
+            color = "white", 
+            size = 4) +
+  labs(x = "",
+       y = "") +
   theme_bw() + 
-  theme(legend.position = "none", axis.text = element_text(size=18))
+  theme(legend.position = "none", axis.text = element_text(size = 18))
 
-###use the predicted CpGs for the score
+### use the predicted CpGs for the score
 # merge the metadata and the data
 m_values_pred <-
   m_values[,colnames(m_values) %in% cpg_keep]
-m_values_pred$sample_ID <-
-  m_values$sample_ID
+m_values_pred$subject_ID <-
+  m_values$subject_ID
 
 data_full <-
   m_values_pred %>%
-  left_join(metadata, by = "sample_ID") %>%
+  left_join(metadata, by = "subject_ID") %>%
   dplyr::select(all_of(names(metadata)), everything())
 
 data_reg <-
   data_full %>%
-  dplyr::select(sample_ID, motherT1D, starts_with("cg")) %>%
+  dplyr::select(subject_ID, maternal_t1d, Study, starts_with("cg")) %>%
   drop_na() %>%
-  mutate(
-    motherT1D = ifelse(motherT1D, "Yes", "No"),
-    motherT1D = factor(motherT1D, levels = c("No", "Yes"))
-  )
+  mutate(across(maternal_t1d, as.factor))
 
 # split the data
-set.seed(42)
-
 train_data <- data_reg %>%
-  filter(study=="BABYDIAB/DIET")
+  filter(Study=="0")
+train_data <- train_data %>%
+  dplyr::select(-Study)
 
 test_data <- data_reg %>%
-  filter(study=="POINT")
+  filter(Study=="1")
+test_data <- test_data %>%
+  dplyr::select(-Study)
 
 # create the classifier using the train data
 the_recipe <-
-  recipe(motherT1D ~ ., 
+  recipe(maternal_t1d ~ ., 
          data = train_data) %>%
-  update_role(sample_ID, 
+  update_role(subject_ID, 
               new_role = "ID")
 
 lr_mod <-
@@ -227,11 +226,11 @@ the_fit %>%
 
 # ROC curve using the train data
 augment(the_fit, train_data) %>%
-  roc_curve(truth = motherT1D, .pred_No) %>%
+  roc_curve(truth = maternal_t1d, .pred_No) %>%
   autoplot()
 
 augment(the_fit, train_data) %>%
-  roc_auc(truth = motherT1D, .pred_No)
+  roc_auc(truth = maternal_t1d, .pred_No)
 
 # check the classifier using the test data
 predict(the_fit, test_data)
@@ -240,14 +239,14 @@ the_aug <-
   augment(the_fit, test_data)
 
 the_aug %>%
-  dplyr::select(motherT1D, sample_ID, .pred_class, .pred_Yes)
+  dplyr::select(maternal_t1d, subject_ID, .pred_class, .pred_Yes)
 
 the_aug %>%
-  roc_curve(truth = motherT1D, .pred_No) %>%
+  roc_curve(truth = maternal_t1d, .pred_No) %>%
   autoplot()
 
 the_aug %>%
-  roc_auc(truth = motherT1D, .pred_No)
+  roc_auc(truth = maternal_t1d, .pred_No)
 
 # calculate the scores for all samples
 intercept <-
@@ -280,8 +279,11 @@ cpg_vector <-
 samples_scores <-
   cpgs_matrix %*% cpg_vector
 
+# add methylation score to the samples
 data_full$risk_score <- samples_scores
 
-cpg_weights<-cpg_weights %>% 
-  dplyr::rename(CpG=term, weight=estimate)
+# get calculated weights per CpG integrated in the methylation score
+cpg_weights <- cpg_weights %>% 
+  dplyr::rename(CpG = term, weight = estimate)
 
+# end
