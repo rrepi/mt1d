@@ -1,4 +1,5 @@
-The EWAS script contains the R code for an epigenome-wide association study between maternal type 1 diabetes status and offspring DNA methylation.
+The EWAS script contains the R code for an epigenome-wide association study between maternal type 1 diabetes status and offspring DNA methylation at cytosine-phosphate-guanine (CpG) sites.
 The MPS script contains the code for building a methylation propensity score (MPS) of differentially methylated sites (in this example CpGs associated with type 1 diabetes suceptibility loci) that optimally "mirrors" the maternal type 1 diabetes status.
-Dummy test data are provided to run both scripts.
-The figures html document provides all figures generated with R of the publication including the R codes used (to open it, please download all files as .zip file and then open it on your PC).
+Dummy test data are provided to run both scripts, with instructions included in each script (run time around 3 minutes on a normal PC).
+The figures html document (created with R Markdown https://rmarkdown.rstudio.com/) contains all figures generated with R as illustrated in the publication, including the R codes and R packages versions used (to open it, please download all files as .zip file and then open it on your PC).
+The codes were built and tested using R software (see https://www.r-project.org/ for installation instructions; installation time ~ 10 minutes on a normal PC) version 4.3.2 (2023-10-31 ucrt) under Windows 10 x64 (build 19045).
